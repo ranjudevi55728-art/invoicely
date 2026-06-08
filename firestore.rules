@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Standalone catch-all deny rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Standard Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    // Entity validator: Invoice
+    function isValidInvoice(data) {
+      return data.keys().hasAll(['invoiceNumber', 'customerId', 'customerName', 'customerEmail', 'items', 'subtotal', 'total', 'status', 'userId'])
+        && data.invoiceNumber is string && data.invoiceNumber.size() <= 64
+        && data.customerId is string && data.customerId.size() <= 128
+        && data.customerName is string && data.customerName.size() <= 128
+        && data.customerEmail is string && data.customerEmail.size() <= 128
+        && data.items is list && data.items.size() <= 100
+        && (data.subtotal is int || data.subtotal is float) && data.subtotal >= 0
+        && (data.total is int || data.total is float) && data.total >= 0
+        && data.status is string && (data.status == 'draft' || data.status == 'pending' || data.status == 'paid' || data.status == 'overdue')
+        && data.userId == request.auth.uid;
+    }
+
+    // Entity validator: Customer
+    function isValidCustomer(data) {
+      return data.keys().hasAll(['name', 'email', 'userId'])
+        && data.name is string && data.name.size() <= 128
+        && data.email is string && data.email.size() <= 128
+        && data.userId == request.auth.uid;
+    }
+
+    // Entity validator: Product
+    function isValidProduct(data) {
+      return data.keys().hasAll(['name', 'rate', 'userId'])
+        && data.name is string && data.name.size() <= 128
+        && (data.rate is int || data.rate is float) && data.rate >= 0
+        && data.userId == request.auth.uid;
+    }
+
+    // Entity validator: Settings
+    function isValidSettings(data) {
+      return data.keys().hasAll(['companyName', 'companyEmail', 'userId'])
+        && data.companyName is string && data.companyName.size() <= 128
+        && data.companyEmail is string && data.companyEmail.size() <= 128
+        && data.userId == request.auth.uid;
+    }
+
+    // Entity validator: UserProfile
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['userId', 'email'])
+        && data.userId == request.auth.uid
+        && data.email is string && data.email.size() <= 128
+        && data.get('companyName', '') is string && data.get('companyName', '').size() <= 128
+        && data.get('companyAddress', '') is string && data.get('companyAddress', '').size() <= 256
+        && data.get('companyGst', '') is string && data.get('companyGst', '').size() <= 128
+        && data.get('companyPhone', '') is string && data.get('companyPhone', '').size() <= 128
+        && data.get('logoUrl', '') is string && data.get('logoUrl', '').size() <= 512
+        && data.get('invoiceFooter', '') is string && data.get('invoiceFooter', '').size() <= 512
+        && data.get('invoiceNotes', '') is string && data.get('invoiceNotes', '').size() <= 1024
+        && data.get('brandColor', '') is string && data.get('brandColor', '').size() <= 64
+        && data.get('pdfTemplateId', '') is string && data.get('pdfTemplateId', '').size() <= 128
+        && data.get('createdAt', '') is string && data.get('createdAt', '').size() <= 128;
+    }
+
+    // Invoices Match Block
+    match /invoices/{invoiceId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(invoiceId) && isValidInvoice(request.resource.data) && request.resource.data.createdAt == request.time;
+      allow update: if isSignedIn() && isValidId(invoiceId) && isValidInvoice(request.resource.data) && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId && request.resource.data.updatedAt == request.time;
+      allow delete: if isSignedIn() && isValidId(invoiceId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Customers Match Block
+    match /customers/{customerId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(customerId) && isValidCustomer(request.resource.data);
+      allow update: if isSignedIn() && isValidId(customerId) && isValidCustomer(request.resource.data) && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && isValidId(customerId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Products Match Block
+    match /products/{productId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(productId) && isValidProduct(request.resource.data);
+      allow update: if isSignedIn() && isValidId(productId) && isValidProduct(request.resource.data) && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && isValidId(productId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Settings Match Block
+    match /settings/{settingsId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(settingsId) && isValidSettings(request.resource.data);
+      allow update: if isSignedIn() && isValidId(settingsId) && isValidSettings(request.resource.data) && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && isValidId(settingsId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Users Match Block
+    match /users/{userId} {
+      allow get: if isSignedIn() && userId == request.auth.uid;
+      allow list: if isSignedIn() && userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUserProfile(request.resource.data);
+      allow update: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUserProfile(request.resource.data) && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && userId == request.auth.uid;
+    }
+  }
+}

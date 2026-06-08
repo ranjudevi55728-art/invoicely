@@ -1,0 +1,6 @@
+{
+  "name": "Invoicely",
+  "description": "A beautiful, premium invoice management dashboard with automated overdue tracking, interactive sales analytics, and details reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
